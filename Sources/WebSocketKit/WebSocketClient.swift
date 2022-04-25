@@ -23,13 +23,16 @@ public final class WebSocketClient {
     public struct Configuration {
         public var tlsConfiguration: TLSConfiguration?
         public var maxFrameSize: Int
+        public var automaticErrorHandling: Bool
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
-            maxFrameSize: Int = 1 << 14
+            maxFrameSize: Int = 1 << 14,
+            automaticErrorHandling: Bool = true
         ) {
             self.tlsConfiguration = tlsConfiguration
             self.maxFrameSize = maxFrameSize
+            self.automaticErrorHandling = automaticErrorHandling
         }
     }
 
@@ -78,7 +81,7 @@ public final class WebSocketClient {
                 let websocketUpgrader = NIOWebSocketClientUpgrader(
                     requestKey:  Data(key).base64EncodedString(),
                     maxFrameSize: self.configuration.maxFrameSize,
-                    automaticErrorHandling: true,
+                    automaticErrorHandling: self.configuration.automaticErrorHandling,
                     upgradePipelineHandler: { channel, req in
                         return WebSocket.client(on: channel, onUpgrade: onUpgrade)
                     }
