@@ -16,6 +16,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.14.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.11.4"),
         .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.2"),
+        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.0.0"),
     ],
     targets: [
         .target(name: "WebSocketKit", dependencies: [
@@ -27,7 +28,8 @@ let package = Package(
             .product(name: "NIOSSL", package: "swift-nio-ssl"),
             .product(name: "NIOWebSocket", package: "swift-nio"),
             .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
-            .product(name: "Atomics", package: "swift-atomics")
+            .product(name: "Atomics", package: "swift-atomics"),
+            .product(name: "NIOHTTPCompression", package: "swift-nio-extras")
         ]),
         .testTarget(name: "WebSocketKitTests", dependencies: [
             .target(name: "WebSocketKit"),

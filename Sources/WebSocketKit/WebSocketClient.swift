@@ -6,6 +6,7 @@ import NIOWebSocket
 import NIOSSL
 import NIOTransportServices
 import Atomics
+import NIOHTTPCompression
 
 public final class WebSocketClient {
     public enum Error: Swift.Error, LocalizedError {
@@ -23,8 +24,38 @@ public final class WebSocketClient {
     }
 
     public struct Configuration {
+        
+        /// Supported HTTP decompression options.
+        public struct DecompressionConfiguration {
+            /// Disables decompression. This is the default option.
+            public static var disabled: Self {
+                .init(storage: .disabled)
+            }
+            
+            /// Enables decompression with default configuration.
+            public static var enabled: Self {
+                .enabled(limit: .ratio(10))
+            }
+            
+            /// Enables decompression with custom configuration.
+            public static func enabled(
+                limit: NIOHTTPDecompression.DecompressionLimit
+            ) -> Self {
+                .init(storage: .enabled(limit: limit))
+            }
+            
+            enum Storage {
+                case disabled
+                case enabled(limit: NIOHTTPDecompression.DecompressionLimit)
+            }
+            
+            var storage: Storage
+        }
+        
         public var tlsConfiguration: TLSConfiguration?
         public var maxFrameSize: Int
+        /// gzip decompression.
+        public var decompression: DecompressionConfiguration
 
         public init(
             tlsConfiguration: TLSConfiguration? = nil,
@@ -32,6 +63,17 @@ public final class WebSocketClient {
         ) {
             self.tlsConfiguration = tlsConfiguration
             self.maxFrameSize = maxFrameSize
+            self.decompression = .disabled
+        }
+        
+        public init(
+            tlsConfiguration: TLSConfiguration? = nil,
+            maxFrameSize: Int = 1 << 14,
+            decompression: DecompressionConfiguration
+        ) {
+            self.tlsConfiguration = tlsConfiguration
+            self.maxFrameSize = maxFrameSize
+            self.decompression = decompression
         }
     }
 
@@ -72,6 +114,18 @@ public final class WebSocketClient {
                     headers: headers,
                     upgradePromise: upgradePromise
                 )
+                
+                let decompressionHandler: NIOHTTPRequestDecompressor? = {
+                    switch self.configuration.decompression.storage {
+                    case .enabled(let limit):
+                        let decompressionHandler = NIOHTTPRequestDecompressor(
+                            limit: limit
+                        )
+                        return decompressionHandler
+                    case .disabled:
+                        return nil
+                    }
+                }()
 
                 var key: [UInt8] = []
                 for _ in 0..<16 {
@@ -91,6 +145,9 @@ public final class WebSocketClient {
                     completionHandler: { context in
                         upgradePromise.succeed(())
                         channel.pipeline.removeHandler(httpHandler, promise: nil)
+                        if decompressionHandler != nil {
+                            channel.pipeline.removeHandler(decompressionHandler!, promise: nil)
+                        }
                     }
                 )
 
@@ -109,6 +166,12 @@ public final class WebSocketClient {
                             channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes, withClientUpgrade: config)
                         }.flatMap {
                             channel.pipeline.addHandler(httpHandler)
+                        }.flatMap {
+                            if decompressionHandler != nil {
+                                return channel.pipeline.addHandler(decompressionHandler!)
+                            } else {
+                                return channel.eventLoop.makeSucceededVoidFuture()
+                            }
                         }
                     } catch {
                         return channel.pipeline.close(mode: .all)
@@ -119,6 +182,12 @@ public final class WebSocketClient {
                         withClientUpgrade: config
                     ).flatMap {
                         channel.pipeline.addHandler(httpHandler)
+                    }.flatMap {
+                        if decompressionHandler != nil {
+                            return channel.pipeline.addHandler(decompressionHandler!)
+                        } else {
+                            return channel.eventLoop.makeSucceededVoidFuture()
+                        }
                     }
                 }
             }
