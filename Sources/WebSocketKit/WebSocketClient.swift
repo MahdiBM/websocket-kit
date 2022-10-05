@@ -106,6 +106,13 @@ public final class WebSocketClient {
         let bootstrap = WebSocketClient.makeBootstrap(on: self.group)
             .channelOption(ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY), value: 1)
             .channelInitializer { channel in
+                let httpHandler = HTTPInitialRequestHandler(
+                    host: host,
+                    path: path,
+                    query: query,
+                    headers: headers,
+                    upgradePromise: upgradePromise
+                )
                 let decompressionHandler: NIOHTTPRequestDecompressor? = {
                     switch self.configuration.decompression.storage {
                     case .enabled(let limit):
@@ -114,13 +121,6 @@ public final class WebSocketClient {
                         return nil
                     }
                 }()
-                let httpHandler = HTTPInitialRequestHandler(
-                    host: host,
-                    path: path,
-                    query: query,
-                    headers: headers,
-                    upgradePromise: upgradePromise
-                )
 
                 var key: [UInt8] = []
                 for _ in 0..<16 {
@@ -160,13 +160,13 @@ public final class WebSocketClient {
                         return channel.pipeline.addHandler(tlsHandler).flatMap {
                             channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes, withClientUpgrade: config)
                         }.flatMap {
+                            channel.pipeline.addHandler(httpHandler)
+                        }.flatMap {
                             if decompressionHandler != nil {
                                 return channel.pipeline.addHandler(decompressionHandler!)
                             } else {
                                 return channel.eventLoop.makeSucceededVoidFuture()
                             }
-                        }.flatMap {
-                            channel.pipeline.addHandler(httpHandler)
                         }
                     } catch {
                         return channel.pipeline.close(mode: .all)
@@ -176,13 +176,13 @@ public final class WebSocketClient {
                         leftOverBytesStrategy: .forwardBytes,
                         withClientUpgrade: config
                     ).flatMap {
+                        channel.pipeline.addHandler(httpHandler)
+                    }.flatMap {
                         if decompressionHandler != nil {
                             return channel.pipeline.addHandler(decompressionHandler!)
                         } else {
-                            return channel.eventLoop.makeSucceededVoidFuture()
+                            return channel.pipeline.eventLoop.makeSucceededVoidFuture()
                         }
-                    }.flatMap {
-                        channel.pipeline.addHandler(httpHandler)
                     }
                 }
             }
