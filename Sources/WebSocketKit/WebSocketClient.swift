@@ -137,9 +137,15 @@ public final class WebSocketClient {
 
                 let config: NIOHTTPClientUpgradeConfiguration = (
                     upgraders: [websocketUpgrader],
-                    completionHandler: { context in
-                        upgradePromise.succeed(())
+                    completionHandler: { _ in
                         channel.pipeline.removeHandler(httpHandler, promise: nil)
+                        if decompressionHandler != nil {
+                            channel.pipeline.addHandler(decompressionHandler!).whenSuccess {
+                                upgradePromise.succeed(())
+                            }
+                        } else {
+                            upgradePromise.succeed(())
+                        }
                     }
                 )
 
@@ -158,12 +164,6 @@ public final class WebSocketClient {
                             channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes, withClientUpgrade: config)
                         }.flatMap {
                             channel.pipeline.addHandler(httpHandler)
-                        }.flatMap {
-                            if decompressionHandler != nil {
-                                return channel.pipeline.addHandler(decompressionHandler!)
-                            } else {
-                                return channel.eventLoop.makeSucceededVoidFuture()
-                            }
                         }
                     } catch {
                         return channel.pipeline.close(mode: .all)
@@ -174,12 +174,6 @@ public final class WebSocketClient {
                         withClientUpgrade: config
                     ).flatMap {
                         channel.pipeline.addHandler(httpHandler)
-                    }.flatMap {
-                        if decompressionHandler != nil {
-                            return channel.pipeline.addHandler(decompressionHandler!)
-                        } else {
-                            return channel.pipeline.eventLoop.makeSucceededVoidFuture()
-                        }
                     }
                 }
             }
