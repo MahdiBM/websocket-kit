@@ -139,9 +139,6 @@ public final class WebSocketClient {
                     upgraders: [websocketUpgrader],
                     completionHandler: { context in
                         upgradePromise.succeed(())
-                        if decompressionHandler != nil {
-                            channel.pipeline.removeHandler(decompressionHandler!, promise: nil)
-                        }
                         channel.pipeline.removeHandler(httpHandler, promise: nil)
                     }
                 )
