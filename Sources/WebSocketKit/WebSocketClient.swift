@@ -138,7 +138,14 @@ public final class WebSocketClient {
                 let config: NIOHTTPClientUpgradeConfiguration = (
                     upgraders: [websocketUpgrader],
                     completionHandler: { context in
-                        upgradePromise.succeed(())
+                        if decompressionHandler != nil {
+                            channel.pipeline.addHandler(
+                                decompressionHandler!,
+                                position: .first
+                            ).cascadeSuccess(to: upgradePromise)
+                        } else {
+                            upgradePromise.succeed(())
+                        }
                         channel.pipeline.removeHandler(httpHandler, promise: nil)
                     }
                 )
@@ -161,15 +168,6 @@ public final class WebSocketClient {
                             )
                         }.flatMap {
                             channel.pipeline.addHandler(httpHandler)
-                        }.flatMap {
-                            if decompressionHandler != nil {
-                                return channel.pipeline.addHandler(
-                                    decompressionHandler!,
-                                    position: .first
-                                )
-                            } else {
-                                return channel.eventLoop.makeSucceededVoidFuture()
-                            }
                         }
                     } catch {
                         return channel.pipeline.close(mode: .all)
@@ -180,15 +178,6 @@ public final class WebSocketClient {
                         withClientUpgrade: config
                     ).flatMap {
                         channel.pipeline.addHandler(httpHandler)
-                    }.flatMap {
-                        if decompressionHandler != nil {
-                            return channel.pipeline.addHandler(
-                                decompressionHandler!,
-                                position: .first
-                            )
-                        } else {
-                            return channel.pipeline.eventLoop.makeSucceededVoidFuture()
-                        }
                     }
                 }
             }
