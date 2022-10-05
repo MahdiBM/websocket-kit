@@ -156,7 +156,6 @@ public final class WebSocketClient {
                         }
                         return channel.pipeline.addHandler(tlsHandler).flatMap {
                             channel.pipeline.addHTTPClientHandlers(
-                                position: .after(httpHandler),
                                 leftOverBytesStrategy: .forwardBytes,
                                 withClientUpgrade: config
                             )
@@ -164,7 +163,10 @@ public final class WebSocketClient {
                             channel.pipeline.addHandler(httpHandler)
                         }.flatMap {
                             if decompressionHandler != nil {
-                                return channel.pipeline.addHandler(decompressionHandler!)
+                                return channel.pipeline.addHandler(
+                                    decompressionHandler!,
+                                    position: .first
+                                )
                             } else {
                                 return channel.eventLoop.makeSucceededVoidFuture()
                             }
@@ -174,14 +176,16 @@ public final class WebSocketClient {
                     }
                 } else {
                     return channel.pipeline.addHTTPClientHandlers(
-                        position: .after(httpHandler),
                         leftOverBytesStrategy: .forwardBytes,
                         withClientUpgrade: config
                     ).flatMap {
                         channel.pipeline.addHandler(httpHandler)
                     }.flatMap {
                         if decompressionHandler != nil {
-                            return channel.pipeline.addHandler(decompressionHandler!)
+                            return channel.pipeline.addHandler(
+                                decompressionHandler!,
+                                position: .first
+                            )
                         } else {
                             return channel.pipeline.eventLoop.makeSucceededVoidFuture()
                         }
