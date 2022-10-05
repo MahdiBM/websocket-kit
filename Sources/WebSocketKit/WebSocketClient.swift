@@ -137,15 +137,9 @@ public final class WebSocketClient {
 
                 let config: NIOHTTPClientUpgradeConfiguration = (
                     upgraders: [websocketUpgrader],
-                    completionHandler: { _ in
+                    completionHandler: { context in
+                        upgradePromise.succeed(())
                         channel.pipeline.removeHandler(httpHandler, promise: nil)
-                        if decompressionHandler != nil {
-                            channel.pipeline.addHandler(decompressionHandler!).whenSuccess {
-                                upgradePromise.succeed(())
-                            }
-                        } else {
-                            upgradePromise.succeed(())
-                        }
                     }
                 )
 
@@ -161,19 +155,36 @@ public final class WebSocketClient {
                             tlsHandler = try NIOSSLClientHandler(context: context, serverHostname: nil)
                         }
                         return channel.pipeline.addHandler(tlsHandler).flatMap {
-                            channel.pipeline.addHTTPClientHandlers(leftOverBytesStrategy: .forwardBytes, withClientUpgrade: config)
+                            channel.pipeline.addHTTPClientHandlers(
+                                position: .after(httpHandler),
+                                leftOverBytesStrategy: .forwardBytes,
+                                withClientUpgrade: config
+                            )
                         }.flatMap {
                             channel.pipeline.addHandler(httpHandler)
+                        }.flatMap {
+                            if decompressionHandler != nil {
+                                return channel.pipeline.addHandler(decompressionHandler!)
+                            } else {
+                                return channel.eventLoop.makeSucceededVoidFuture()
+                            }
                         }
                     } catch {
                         return channel.pipeline.close(mode: .all)
                     }
                 } else {
                     return channel.pipeline.addHTTPClientHandlers(
+                        position: .after(httpHandler),
                         leftOverBytesStrategy: .forwardBytes,
                         withClientUpgrade: config
                     ).flatMap {
                         channel.pipeline.addHandler(httpHandler)
+                    }.flatMap {
+                        if decompressionHandler != nil {
+                            return channel.pipeline.addHandler(decompressionHandler!)
+                        } else {
+                            return channel.pipeline.eventLoop.makeSucceededVoidFuture()
+                        }
                     }
                 }
             }
